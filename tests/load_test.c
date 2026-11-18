@@ -14,6 +14,7 @@ long fail_count = 0;
 pthread_mutex_t lock;
 
 void *client_thread(void *arg) {
+    (void)arg;
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         pthread_mutex_lock(&lock);
