@@ -11,3 +11,4 @@ zero_bus_test
 .DS_Store
 .vscode/
 *.swp
+zb_bridge
