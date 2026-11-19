@@ -104,7 +104,66 @@ int main(void) {
     assert(s2_got == strlen("abc-stream-2"));
     assert(memcmp(s2_out, "abc-stream-2", s2_got) == 0);
 
-    printf("demux_test passed! bp_seen=%d s1_pending=%zu s2_popped=%zu\n",
-           bp_seen, e1->pending_bytes, s2_got);
+    /* Close active stream 1, reuse freed slot for new stream_id=3, and demux new frames */
+    assert(zb_stream_close(&tbl, 1) == ZB_STREAM_OK);
+    assert(zb_stream_get(&tbl, 1) == NULL);
+    assert(tbl.count == 1);
+
+    uint8_t s3_ring[32];
+    assert(zb_stream_open(&tbl, 3, s3_ring, sizeof(s3_ring), 24) == ZB_STREAM_OK);
+    assert(tbl.count == 2);
+
+    uint8_t wire3[256];
+    size_t wire3_used = 0;
+
+    const char *r1 = "reused-slot-1";
+    size_t rn1 = zb_frame_encode(wire3 + wire3_used, sizeof(wire3) - wire3_used,
+                                 20, 3, (const uint8_t *)r1, (uint32_t)strlen(r1));
+    assert(rn1 > 0);
+    wire3_used += rn1;
+
+    const char *r2 = "-ok";
+    size_t rn2 = zb_frame_encode(wire3 + wire3_used, sizeof(wire3) - wire3_used,
+                                 21, 3, (const uint8_t *)r2, (uint32_t)strlen(r2));
+    assert(rn2 > 0);
+    wire3_used += rn2;
+
+    size_t roff = 0;
+    uint32_t s3_demuxed = 0;
+    while (roff < wire3_used) {
+        size_t chunk = 5;
+        if (chunk > wire3_used - roff) {
+            chunk = wire3_used - roff;
+        }
+        assert(zb_rx_push(&rx, wire3 + roff, chunk) == ZB_OK);
+        roff += chunk;
+
+        for (;;) {
+            zb_status_t st = zb_rx_pop_frame(&rx, &hdr, payload_buf, sizeof(payload_buf));
+            if (st == ZB_ERR_NEED_MORE) {
+                break;
+            }
+            assert(st == ZB_OK);
+            assert(hdr.stream_id == 3);
+            assert(zb_stream_push(&tbl, hdr.stream_id, payload_buf, hdr.payload_len) == ZB_STREAM_OK);
+            s3_demuxed++;
+        }
+    }
+
+    assert(s3_demuxed == 2);
+    const zb_stream_entry_t *e3 = zb_stream_get(&tbl, 3);
+    assert(e3 != NULL);
+    assert(e3->frames_in == 2);
+    assert(e3->bytes_in == strlen("reused-slot-1-ok"));
+    assert(e3->pending_bytes == strlen("reused-slot-1-ok"));
+
+    char s3_out[64];
+    size_t s3_got = zb_stream_pop(&tbl, 3, (uint8_t *)s3_out, sizeof(s3_out) - 1);
+    assert(s3_got == strlen("reused-slot-1-ok"));
+    s3_out[s3_got] = '\0';
+    assert(strcmp(s3_out, "reused-slot-1-ok") == 0);
+
+    printf("demux_test passed! bp_seen=%d s1_pending=%zu s2_popped=%zu s3=%s\n",
+           bp_seen, e1->pending_bytes, s2_got, s3_out);
     return 0;
 }
