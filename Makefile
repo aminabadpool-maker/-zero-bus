@@ -26,9 +26,11 @@ test:
 	"$(TMP_DIR)/zb_stream_test"
 	$(CC) $(CFLAGS) src/frame.c src/mem.c src/stream.c tests/demux_test.c -o "$(TMP_DIR)/zb_demux_test"
 	"$(TMP_DIR)/zb_demux_test"
+	$(CC) $(CFLAGS) src/frame.c src/mem.c src/stream.c tests/demux_stress_test.c -o "$(TMP_DIR)/zb_demux_stress_test"
+	"$(TMP_DIR)/zb_demux_stress_test"
 	$(CC) $(CFLAGS) src/frame.c src/mem.c src/stream.c tests/fuzz_test.c -o "$(TMP_DIR)/zb_fuzz_test"
 	"$(TMP_DIR)/zb_fuzz_test"
-	@rm -f "$(TMP_DIR)/zb_frame_test" "$(TMP_DIR)/zb_frame_errors_test" "$(TMP_DIR)/zb_transport_test" "$(TMP_DIR)/zb_unix_sock_test" "$(TMP_DIR)/zb_unix_sock_stress_test" "$(TMP_DIR)/zb_unix_sock_demux_bp_test" "$(TMP_DIR)/zb_mem_test" "$(TMP_DIR)/zb_stream_test" "$(TMP_DIR)/zb_demux_test" "$(TMP_DIR)/zb_fuzz_test"
+	@rm -f "$(TMP_DIR)/zb_frame_test" "$(TMP_DIR)/zb_frame_errors_test" "$(TMP_DIR)/zb_transport_test" "$(TMP_DIR)/zb_unix_sock_test" "$(TMP_DIR)/zb_unix_sock_stress_test" "$(TMP_DIR)/zb_unix_sock_demux_bp_test" "$(TMP_DIR)/zb_mem_test" "$(TMP_DIR)/zb_stream_test" "$(TMP_DIR)/zb_demux_test" "$(TMP_DIR)/zb_demux_stress_test" "$(TMP_DIR)/zb_fuzz_test"
 
 clean:
-	@rm -f "$(TMP_DIR)/zb_frame_test" "$(TMP_DIR)/zb_frame_errors_test" "$(TMP_DIR)/zb_transport_test" "$(TMP_DIR)/zb_unix_sock_test" "$(TMP_DIR)/zb_unix_sock_stress_test" "$(TMP_DIR)/zb_unix_sock_demux_bp_test" "$(TMP_DIR)/zb_mem_test" "$(TMP_DIR)/zb_stream_test" "$(TMP_DIR)/zb_demux_test" "$(TMP_DIR)/zb_fuzz_test"
+	@rm -f "$(TMP_DIR)/zb_frame_test" "$(TMP_DIR)/zb_frame_errors_test" "$(TMP_DIR)/zb_transport_test" "$(TMP_DIR)/zb_unix_sock_test" "$(TMP_DIR)/zb_unix_sock_stress_test" "$(TMP_DIR)/zb_unix_sock_demux_bp_test" "$(TMP_DIR)/zb_mem_test" "$(TMP_DIR)/zb_stream_test" "$(TMP_DIR)/zb_demux_test" "$(TMP_DIR)/zb_demux_stress_test" "$(TMP_DIR)/zb_fuzz_test"
