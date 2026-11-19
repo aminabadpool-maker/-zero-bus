@@ -66,11 +66,24 @@ zb_stream_status_t zb_stream_open(zb_stream_table_t *tbl, uint32_t stream_id,
 }
 
 zb_stream_status_t zb_stream_close(zb_stream_table_t *tbl, uint32_t stream_id) {
+    if (!tbl || stream_id == 0) {
+        return ZB_STREAM_ERR_ARG;
+    }
     zb_stream_entry_t *e = find_entry(tbl, stream_id);
     if (!e) {
         return ZB_STREAM_ERR_NOT_FOUND;
     }
-    e->closed = true;
+    zb_ring_reset(&e->ring);
+    e->stream_id = 0;
+    e->active = false;
+    e->closed = false;
+    e->high_watermark = 0;
+    e->pending_bytes = 0;
+    e->frames_in = 0;
+    e->bytes_in = 0;
+    if (tbl->count > 0) {
+        tbl->count--;
+    }
     return ZB_STREAM_OK;
 }
 
