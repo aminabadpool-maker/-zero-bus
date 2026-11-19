@@ -1,6 +1,9 @@
 #include "zb_transport.h"
 #include <errno.h>
 #include <signal.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 int zb_ignore_sigpipe(void) {
@@ -28,6 +31,93 @@ void zb_close_fd(int *fd) {
             continue;
         }
         break;
+    }
+}
+
+static int fill_sockaddr_un(const char *sock_path, struct sockaddr_un *addr, socklen_t *out_len) {
+    if (!sock_path || !addr || !out_len || sock_path[0] == '\0') {
+        return -1;
+    }
+    size_t path_len = strlen(sock_path);
+    if (path_len >= sizeof(addr->sun_path)) {
+        return -1;
+    }
+    memset(addr, 0, sizeof(*addr));
+    addr->sun_family = AF_UNIX;
+    memcpy(addr->sun_path, sock_path, path_len + 1u);
+    *out_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + path_len + 1u);
+    return 0;
+}
+
+int zb_unix_listen(const char *sock_path, int backlog) {
+    if (!sock_path || backlog <= 0) {
+        return -1;
+    }
+    struct sockaddr_un addr;
+    socklen_t addr_len = 0;
+    if (fill_sockaddr_un(sock_path, &addr, &addr_len) != 0) {
+        return -1;
+    }
+
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+
+    unlink(sock_path);
+
+    if (bind(fd, (const struct sockaddr *)&addr, addr_len) != 0) {
+        zb_close_fd(&fd);
+        return -1;
+    }
+    if (listen(fd, backlog) != 0) {
+        zb_close_fd(&fd);
+        unlink(sock_path);
+        return -1;
+    }
+    return fd;
+}
+
+int zb_unix_accept(int listen_fd) {
+    if (listen_fd < 0) {
+        return -1;
+    }
+    for (;;) {
+        int client_fd = accept(listen_fd, NULL, NULL);
+        if (client_fd >= 0) {
+            return client_fd;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        return -1;
+    }
+}
+
+int zb_unix_connect(const char *sock_path) {
+    if (!sock_path) {
+        return -1;
+    }
+    struct sockaddr_un addr;
+    socklen_t addr_len = 0;
+    if (fill_sockaddr_un(sock_path, &addr, &addr_len) != 0) {
+        return -1;
+    }
+
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+
+    for (;;) {
+        if (connect(fd, (const struct sockaddr *)&addr, addr_len) == 0) {
+            return fd;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        zb_close_fd(&fd);
+        return -1;
     }
 }
 

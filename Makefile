@@ -1,22 +1,28 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -Iinclude
+CC ?= gcc
+CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror -Iinclude
+TMP_DIR ?= $(if $(TMPDIR),$(TMPDIR),/tmp)
 
-all: bridge fuzz_test load_test
+.PHONY: all test clean
 
-bridge: src/frame.c src/zb_bridge.c
-	$(CC) $(CFLAGS) -O3 src/frame.c src/zb_bridge.c -o zb_bridge
+all: test
 
-fuzz_test: src/frame.c src/transport.c tests/fuzz_test.c
-	$(CC) $(CFLAGS) -g -O0 src/frame.c src/transport.c tests/fuzz_test.c -o zero_bus_test
-
-load_test: tests/load_test.c
-	$(CC) $(CFLAGS) -O3 tests/load_test.c -lpthread -o load_test
-
-test: fuzz_test
-	./zero_bus_test
-	@echo "[+] Fuzzing tests passed successfully!"
+test:
+	@mkdir -p "$(TMP_DIR)"
+	$(CC) $(CFLAGS) src/frame.c tests/frame_test.c -o "$(TMP_DIR)/zb_frame_test"
+	"$(TMP_DIR)/zb_frame_test"
+	$(CC) $(CFLAGS) src/frame.c tests/frame_errors_test.c -o "$(TMP_DIR)/zb_frame_errors_test"
+	"$(TMP_DIR)/zb_frame_errors_test"
+	$(CC) $(CFLAGS) src/frame.c src/transport.c tests/transport_test.c -o "$(TMP_DIR)/zb_transport_test"
+	"$(TMP_DIR)/zb_transport_test"
+	$(CC) $(CFLAGS) src/frame.c src/transport.c tests/unix_sock_test.c -o "$(TMP_DIR)/zb_unix_sock_test"
+	"$(TMP_DIR)/zb_unix_sock_test"
+	$(CC) $(CFLAGS) src/mem.c tests/mem_test.c -o "$(TMP_DIR)/zb_mem_test"
+	"$(TMP_DIR)/zb_mem_test"
+	$(CC) $(CFLAGS) src/mem.c src/stream.c tests/stream_test.c -o "$(TMP_DIR)/zb_stream_test"
+	"$(TMP_DIR)/zb_stream_test"
+	$(CC) $(CFLAGS) src/frame.c src/mem.c src/stream.c tests/demux_test.c -o "$(TMP_DIR)/zb_demux_test"
+	"$(TMP_DIR)/zb_demux_test"
+	@rm -f "$(TMP_DIR)/zb_frame_test" "$(TMP_DIR)/zb_frame_errors_test" "$(TMP_DIR)/zb_transport_test" "$(TMP_DIR)/zb_unix_sock_test" "$(TMP_DIR)/zb_mem_test" "$(TMP_DIR)/zb_stream_test" "$(TMP_DIR)/zb_demux_test"
 
 clean:
-	rm -f zb_bridge zero_bus_test load_test *.o *.sock
-
-.PHONY: all bridge fuzz_test load_test test clean
+	@rm -f "$(TMP_DIR)/zb_frame_test" "$(TMP_DIR)/zb_frame_errors_test" "$(TMP_DIR)/zb_transport_test" "$(TMP_DIR)/zb_unix_sock_test" "$(TMP_DIR)/zb_mem_test" "$(TMP_DIR)/zb_stream_test" "$(TMP_DIR)/zb_demux_test"

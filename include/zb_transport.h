@@ -16,6 +16,10 @@ typedef enum {
 int zb_ignore_sigpipe(void);
 void zb_close_fd(int *fd);
 
+int zb_unix_listen(const char *sock_path, int backlog);
+int zb_unix_accept(int listen_fd);
+int zb_unix_connect(const char *sock_path);
+
 zb_io_status_t zb_write_all(int fd, const uint8_t *buf, size_t len, size_t *out_written);
 zb_io_status_t zb_send_frame(int fd, uint16_t msg_type, uint32_t stream_id,
                              const uint8_t *payload, uint32_t payload_len,
