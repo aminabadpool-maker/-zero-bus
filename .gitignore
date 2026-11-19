@@ -12,3 +12,7 @@ zero_bus_test
 .vscode/
 *.swp
 zb_bridge
+storage/
+1.c
+build/
+bin/

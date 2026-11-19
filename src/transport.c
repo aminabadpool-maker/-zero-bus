@@ -1,61 +1,110 @@
-#include "zero_bus.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "zb_transport.h"
+#include <errno.h>
+#include <signal.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 
-int zb_server_init(void) {
-    int server_fd;
-    struct sockaddr_un address;
-
-    server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (server_fd < 0) {
-        perror("[-] Socket creation failed");
+int zb_ignore_sigpipe(void) {
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGPIPE, &sa, NULL) != 0) {
         return -1;
     }
-
-    unlink(ZB_SOCKET_PATH);
-
-    memset(&address, 0, sizeof(struct sockaddr_un));
-    address.sun_family = AF_UNIX;
-    strncpy(address.sun_path, ZB_SOCKET_PATH, sizeof(address.sun_path) - 1);
-
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(struct sockaddr_un)) < 0) {
-        perror("[-] Socket bind failed");
-        close(server_fd);
-        return -1;
-    }
-
-    if (listen(server_fd, 5) < 0) {
-        perror("[-] Socket listen failed");
-        close(server_fd);
-        return -1;
-    }
-
-    return server_fd;
+    return 0;
 }
 
-int zb_client_connect(void) {
-    int sock_fd;
-    struct sockaddr_un address;
+void zb_close_fd(int *fd) {
+    if (!fd || *fd < 0) {
+        return;
+    }
+    int target = *fd;
+    *fd = -1;
+    for (;;) {
+        if (close(target) == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        break;
+    }
+}
 
-    sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sock_fd < 0) {
-        perror("[-] Client socket creation failed");
-        return -1;
+zb_io_status_t zb_write_all(int fd, const uint8_t *buf, size_t len, size_t *out_written) {
+    if (out_written) {
+        *out_written = 0;
+    }
+    if (fd < 0 || (len > 0 && !buf)) {
+        return ZB_IO_BAD_ARG;
     }
 
-    memset(&address, 0, sizeof(struct sockaddr_un));
-    address.sun_family = AF_UNIX;
-    strncpy(address.sun_path, ZB_SOCKET_PATH, sizeof(address.sun_path) - 1);
+    size_t total = 0;
+    while (total < len) {
+        ssize_t n = write(fd, buf + total, len - total);
+        if (n > 0) {
+            total += (size_t)n;
+            if (out_written) {
+                *out_written = total;
+            }
+            continue;
+        }
+        if (n == 0) {
+            return ZB_IO_EOF;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        return ZB_IO_ERR;
+    }
+    return ZB_IO_OK;
+}
 
-    if (connect(sock_fd, (struct sockaddr *)&address, sizeof(struct sockaddr_un)) < 0) {
-        perror("[-] Client connect failed");
-        close(sock_fd);
-        return -1;
+zb_io_status_t zb_send_frame(int fd, uint16_t msg_type, uint32_t stream_id,
+                             const uint8_t *payload, uint32_t payload_len,
+                             uint8_t *scratch, size_t scratch_cap) {
+    if (fd < 0 || !scratch || scratch_cap < sizeof(zb_hdr_t)) {
+        return ZB_IO_BAD_ARG;
+    }
+    size_t wire_len = zb_frame_encode(scratch, scratch_cap, msg_type, stream_id,
+                                      payload, payload_len);
+    if (wire_len == 0) {
+        return ZB_IO_BAD_ARG;
+    }
+    return zb_write_all(fd, scratch, wire_len, NULL);
+}
+
+zb_io_status_t zb_recv_next_frame(int fd, zb_rx_stream_t *rx,
+                                  zb_hdr_t *out_hdr,
+                                  uint8_t *out_payload, size_t out_payload_cap) {
+    if (fd < 0 || !rx || !rx->buf || !out_hdr) {
+        return ZB_IO_BAD_ARG;
     }
 
-    return sock_fd;
+    for (;;) {
+        zb_status_t st = zb_rx_pop_frame(rx, out_hdr, out_payload, out_payload_cap);
+        if (st == ZB_OK) {
+            return ZB_IO_OK;
+        }
+        if (st != ZB_ERR_NEED_MORE) {
+            return ZB_IO_ERR;
+        }
+
+        if (rx->len >= rx->cap) {
+            return ZB_IO_ERR;
+        }
+
+        ssize_t n = read(fd, rx->buf + rx->len, rx->cap - rx->len);
+        if (n > 0) {
+            rx->len += (size_t)n;
+            continue;
+        }
+        if (n == 0) {
+            return (rx->len == 0) ? ZB_IO_EOF : ZB_IO_ERR;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        return ZB_IO_ERR;
+    }
 }
